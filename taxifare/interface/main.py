@@ -10,9 +10,10 @@ from taxifare.ml_logic.data import get_data_with_cache, clean_data, load_data_to
 from taxifare.ml_logic.model import initialize_model, compile_model, train_model, evaluate_model
 from taxifare.ml_logic.preprocessor import preprocess_features
 from taxifare.ml_logic.registry import load_model, save_model, save_results
+
 def preprocess(min_date:str = '2009-01-01', max_date:str = '2015-01-01') -> None:
     """
-    - Query the raw dataset from Le Wagon's BigQuery dataset
+    - Query the raw dataset from WorkinTech's BigQuery dataset
     - Cache query result as a local CSV if it doesn't exist locally
     - Process query data
     - Store processed data on your personal BQ (truncate existing table if it exists)
@@ -25,22 +26,55 @@ def preprocess(min_date:str = '2009-01-01', max_date:str = '2015-01-01') -> None
     min_date = parse(min_date).strftime('%Y-%m-%d') # e.g '2009-01-01'
     max_date = parse(max_date).strftime('%Y-%m-%d') # e.g '2009-01-01'
 
+    # Önceki projeden referansla query değişkeni:
+    # GCP_PROJECT_WAGON yerine params.py'da tanımlı GCP_PROJECT_WORKINTECH kullanıyoruz.
     query = f"""
         SELECT {",".join(COLUMN_NAMES_RAW)}
-        FROM `{GCP_PROJECT_WAGON}`.{BQ_DATASET}.raw_{DATA_SIZE}
+        FROM `{GCP_PROJECT_WORKINTECH}`.{BQ_DATASET}.{BQ_DATASET}_{DATA_SIZE}
         WHERE pickup_datetime BETWEEN '{min_date}' AND '{max_date}'
         ORDER BY pickup_datetime
     """
 
-    pass  # YOUR CODE HERE
+    # 1. Veriyi Çek (Get Data)
+    # Ham veriyi yerel diske cache'ler, varsa oradan okur.
+    data_query_cache_path = Path(LOCAL_DATA_PATH).joinpath("raw", f"query_{min_date}_{max_date}_{DATA_SIZE}.csv")
+    data_query = get_data_with_cache(
+        gcp_project=GCP_PROJECT, # Sorgu maliyetini kendi projemiz üstlenir
+        query=query,
+        cache_path=data_query_cache_path,
+        data_has_header=True
+    )
 
-    # Process data
-    pass  # YOUR CODE HERE
-    # Load a DataFrame onto BigQuery containing [pickup_datetime, X_processed, y]
-    # using data.load_data_to_bq()
-    pass  # YOUR CODE HERE
+    # 2. Veriyi İşle (Process Data)
+    # Temizleme ve Ön İşleme adımları
+    data_clean = clean_data(data_query)
+    
+    # X ve y ayrımı
+    X = data_clean.drop("fare_amount", axis=1)
+    y = data_clean[["fare_amount"]]
+    
+    # Özellikleri işle (numpy array döner)
+    X_processed = preprocess_features(X)
+
+    # 3. BigQuery'e Yükle (Load to BQ)
+    # İşlenmiş veriyi (X_processed + y) tek bir DataFrame olarak birleştir
+    # BQ'ya yüklemek için DataFrame formatında olmalı.
+    data_processed_df = pd.DataFrame(
+        np.concatenate((X_processed, y), axis=1)
+    )
+    
+    # Sütun isimleri BQ'da çok önemli değil ama tutarlılık için eklenebilir, 
+    # şimdilik otomatik isimlendirme ile yüklüyoruz.
+    load_data_to_bq(
+        data_processed_df,
+        gcp_project=GCP_PROJECT,
+        bq_dataset=BQ_DATASET,
+        table=f"processed_{DATA_SIZE}",
+        truncate=True # Her seferinde tabloyu sıfırdan oluştur
+    )
 
     print("✅ preprocess() done \n")
+
 def train(
         min_date:str = '2009-01-01',
         max_date:str = '2015-01-01',
@@ -65,15 +99,59 @@ def train(
     max_date = parse(max_date).strftime('%Y-%m-%d') # e.g '2009-01-01'
 
     # Load processed data using `get_data_with_cache` in chronological order
-    # Try it out manually on console.cloud.google.com first!
+    
+    # 1. İşlenmiş veriyi kendi BQ tablomuzdan çekmek için sorgu
+    # NOT: Preprocess aşamasında veriyi zaten işleyip yüklediğimiz için 
+    # burada sadece "SELECT *" yapıyoruz.
+    query = f"""
+        SELECT *
+        FROM `{GCP_PROJECT}`.{BQ_DATASET}.processed_{DATA_SIZE}
+    """
+    
+    data_processed_cache_path = Path(LOCAL_DATA_PATH).joinpath("processed", f"processed_{min_date}_{max_date}_{DATA_SIZE}.csv")
+    
+    data_processed = get_data_with_cache(
+        gcp_project=GCP_PROJECT,
+        query=query,
+        cache_path=data_processed_cache_path,
+        data_has_header=False # Preprocess çıktısında header yoktu
+    )
+    
+    # Veri gelmezse işlemi durdur
+    if data_processed.shape[0] < 10:
+        print("❌ Not enough data, probably empty...")
+        return None
 
-    pass  # YOUR CODE HERE
+    # 2. Train/Val Ayrımı (Split)
+    # Veri zaten tarih sırasına göre geldiği için (BQ'ya öyle yüklemiştik veya yüklerken sıralıydı)
+    # sondan ayırabiliriz.
+    train_length = int(len(data_processed) * (1 - split_ratio))
+    
+    # Numpy array'e çevir
+    data_processed_np = data_processed.to_numpy()
+    
+    df_train = data_processed_np[:train_length, :]
+    df_val = data_processed_np[train_length:, :]
+    
+    # X ve y ayrımı (son sütun y, öncekiler X)
+    X_train_processed = df_train[:, :-1]
+    y_train = df_train[:, -1]
+    
+    X_val_processed = df_val[:, :-1]
+    y_val = df_val[:, -1]
 
-    # Create (X_train_processed, y_train, X_val_processed, y_val)
-    pass  # YOUR CODE HERE
-
-    # Train model using `model.py`
-    pass  # YOUR CODE HERE
+    # 3. Model Eğitimi (Train)
+    model = initialize_model(input_shape=X_train_processed.shape[1:])
+    model = compile_model(model, learning_rate=learning_rate)
+    
+    model, history = train_model(
+        model, 
+        X_train_processed, 
+        y_train,
+        batch_size=batch_size,
+        patience=patience,
+        validation_data=(X_val_processed, y_val)
+    )
 
     val_mae = np.min(history.history['val_mae'])
 
@@ -111,7 +189,32 @@ def evaluate(
     max_date = parse(max_date).strftime('%Y-%m-%d') # e.g '2009-01-01'
 
     # Query your BigQuery processed table and get data_processed using `get_data_with_cache`
-    pass  # YOUR CODE HERE
+    
+    # 1. Değerlendirme verisini çek
+    query = f"""
+        SELECT *
+        FROM `{GCP_PROJECT}`.{BQ_DATASET}.processed_{DATA_SIZE}
+        WHERE CAST(int64_field_4 AS FLOAT64) >= 0 
+    """
+    # NOT: Processed tabloda tarih sütunu kaybolduğu için (işlenmiş float'a döndü)
+    # normalde tarih filtresi yapamayız. 
+    # Ancak basitlik adına tüm tabloyu çekip test edebiliriz veya
+    # preprocess aşamasında tarihi de saklamamız gerekirdi.
+    # Şimdilik yukarıdaki train mantığıyla tüm veriyi çekelim:
+    
+    query = f"""
+        SELECT *
+        FROM `{GCP_PROJECT}`.{BQ_DATASET}.processed_{DATA_SIZE}
+    """
+    
+    data_processed_cache_path = Path(LOCAL_DATA_PATH).joinpath("processed", f"processed_{min_date}_{max_date}_{DATA_SIZE}.csv")
+    
+    data_processed = get_data_with_cache(
+        gcp_project=GCP_PROJECT,
+        query=query,
+        cache_path=data_processed_cache_path,
+        data_has_header=False
+    )
 
     if data_processed.shape[0] == 0:
         print("❌ No data to evaluate on")
@@ -119,6 +222,7 @@ def evaluate(
 
     data_processed = data_processed.to_numpy()
 
+    # X ve y ayrımı
     X_new = data_processed[:, :-1]
     y_new = data_processed[:, -1]
 

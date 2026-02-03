@@ -6,7 +6,7 @@ DATA_SIZE = os.environ.get("DATA_SIZE")
 CHUNK_SIZE = int(os.environ.get("CHUNK_SIZE"))
 MODEL_TARGET = os.environ.get("MODEL_TARGET")
 GCP_PROJECT = os.environ.get("GCP_PROJECT")
-GCP_PROJECT_WAGON = os.environ.get("GCP_PROJECT_WAGON")
+GCP_PROJECT_WORKINTECH = os.environ.get("GCP_PROJECT_WORKINTECH")
 GCP_REGION = os.environ.get("GCP_REGION")
 BQ_DATASET = os.environ.get("BQ_DATASET")
 BQ_REGION = os.environ.get("BQ_REGION")
@@ -22,8 +22,8 @@ GAR_IMAGE = os.environ.get("GAR_IMAGE")
 GAR_MEMORY = os.environ.get("GAR_MEMORY")
 
 ##################  CONSTANTS  #####################
-LOCAL_DATA_PATH = os.path.join(os.path.expanduser('~'), ".workintech", "mlops", "data")
-LOCAL_REGISTRY_PATH =  os.path.join(os.path.expanduser('~'), ".workintech", "mlops", "training_outputs")
+LOCAL_DATA_PATH = os.path.join(os.path.expanduser('~'), "workintech", "mlops", "data")
+LOCAL_REGISTRY_PATH =  os.path.join(os.path.expanduser('~'), "workintech", "mlops", "training_outputs")
 
 COLUMN_NAMES_RAW = ['fare_amount','pickup_datetime', 'pickup_longitude', 'pickup_latitude', 'dropoff_longitude', 'dropoff_latitude', 'passenger_count']
 
