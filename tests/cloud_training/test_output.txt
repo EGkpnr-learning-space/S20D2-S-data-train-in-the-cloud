@@ -1,7 +1,7 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.10.6, pytest-9.0.2, pluggy-1.6.0 -- /home/egkpnr/.pyenv/versions/3.10.6/envs/taxifare-env/bin/python
 cachedir: .pytest_cache
-rootdir: /home/egkpnr/code/EGkpnr/S20D1-S-/S20D2-S-data-train-in-the-cloud/tests
+rootdir: /home/egkpnr/S20D1-S-/S20D2-S-data-train-in-the-cloud/tests
 configfile: pytest_kitt.ini
 collecting ... collected 9 items
 
@@ -18,7 +18,7 @@ tests/cloud_training/test_vm.py::test_i_am_a_vm FAILED                   [100%]
 =================================== FAILURES ===================================
 __________________ TestCloudData.test_cloud_data_create_table __________________
 
-self = <tests.cloud_training.test_cloud_data.TestCloudData object at 0x712f223708b0>
+self = <tests.cloud_training.test_cloud_data.TestCloudData object at 0x7e498d213cd0>
 
     def test_cloud_data_create_table(self):
         """
@@ -45,13 +45,13 @@ ________________________________ test_i_am_a_vm ________________________________
     
 >       assert platform.node() == INSTANCE, f"You should be running from your instance named '{INSTANCE}'."
 E       AssertionError: You should be running from your instance named 'taxi-instance'.
-E       assert 'EGkpnr' == 'taxi-instance'
+E       assert 'taxi-instanc...inel.internal' == 'taxi-instance'
 E         
 E         - taxi-instance
-E         + EGkpnr
+E         + taxi-instance.europe-west1-b.c.silicon-sentinel.internal
 
 tests/cloud_training/test_vm.py:9: AssertionError
 =========================== short test summary info ============================
 FAILED tests/cloud_training/test_cloud_data.py::TestCloudData::test_cloud_data_create_table
 FAILED tests/cloud_training/test_vm.py::test_i_am_a_vm - AssertionError: You ...
-================== 2 failed, 7 passed, 18 warnings in 18.27s ===================
+================== 2 failed, 7 passed, 18 warnings in 30.42s ===================
